@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actor Voice Routine — v2</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --muted:#9aa4af; --text:#e7ecf3;
+    --accent:#22d3ee; --ok:#34d399; --warn:#f59e0b; --bad:#ef4444; --grid:#232833;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+       background:linear-gradient(180deg,#0b0d11,#0f1115 60%); color:var(--text)}
+  header{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.7);backdrop-filter:blur(8px);
+         border-bottom:1px solid #232833}
+  .wrap{max-width:980px;margin:0 auto;padding:14px}
+  h1{margin:6px 0 2px 0;font-size:20px}
+  .sub{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pill{border:1px solid #2a3140;padding:4px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
+  button{background:#0f172a;border:1px solid #2a3140;color:var(--text);padding:8px 12px;border-radius:10px;
+         cursor:pointer;font-weight:600}
+  button.primary{border-color:#22d3ee;background:#0a1520}
+  button.ok{border-color:#34d399}
+  .grid{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:900px){.grid{grid-template-columns:2fr 1fr}}
+  .card{background:var(--card);border:1px solid #232833;border-radius:12px;padding:14px}
+  .section-title{font-weight:700;font-size:14px;letter-spacing:.2px;text-transform:uppercase;color:#b7c3cf}
+  .step{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;border:1px solid #2a3140;
+        border-radius:10px;padding:10px;margin-bottom:8px}
+  .step.done{border-color:#34d399;background:#0b1a17}
+  .step h3{margin:0;font-size:15px}
+  .meta{font-size:12px;color:var(--muted)}
+  .timer{font-variant-numeric:tabular-nums;font-weight:700;padding:2px 8px;border:1px dashed #304050;
+         border-radius:8px;font-size:13px}
+  .active-step{outline:2px solid var(--accent)}
+  .toast{position:fixed;right:16px;bottom:16px;background:#0b1a17;border:1px solid #22d3ee;padding:10px 12px;
+         border-radius:10px;color:#bffaff;font-size:13px;opacity:0;transform:translateY(12px);transition:.2s}
+  .toast.show{opacity:1;transform:translateY(0)}
+  /* JS overlay */
+  #jsOverlay{position:fixed;inset:0;background:#0b0d11;display:flex;align-items:center;justify-content:center;
+             z-index:9999;color:#e7ecf3;padding:24px;text-align:left}
+  #jsOverlay .box{max-width:720px;background:#12161e;border:1px solid #2a3140;border-radius:12px;padding:16px}
+  #jsOK{color:#34d399;font-weight:700}
+</style>
+</head>
+<body>
+<div id="jsOverlay">
+  <div class="box">
+    <h2 style="margin:0 0 6px 0">This viewer blocks JavaScript</h2>
+    <p style="margin:0 0 10px 0; color:#cbd5e1">You opened the file in a preview that doesn’t run code, so buttons won’t work.</p>
+    <ol style="margin:0; padding-left:18px; color:#cbd5e1">
+      <li>Tap the Share icon.</li>
+      <li>Choose <b>Open in Safari</b>. If you can’t see that: Share → <b>Save to Files</b>, then open it from Files in Safari.</li>
+      <li>In Safari, everything is clickable and progress saves (localStorage).</li>
+      <li>Optional: Share → <b>Add to Home Screen</b>.</li>
+    </ol>
+    <p class="sub" style="margin-top:10px">If this message disappears, JavaScript is running: <span id="jsOK">checking…</span></p>
+  </div>
+</div>
+
+<header>
+  <div class="wrap">
+    <h1>Actor Voice Routine <span class="pill" id="readyMark" style="margin-left:6px">JS: starting…</span></h1>
+    <div class="sub">Daily guided checklist with timers, metrics, streaks. All data stays in your browser.</div>
+    <div class="row" style="margin-top:8px">
+      <button id="startFlow" class="primary">Start Routine</button>
+      <button id="advance" class="">Advance (Enter)</button>
+      <button id="markAll" class="ok">Mark All Done</button>
+      <span class="pill" id="todayLabel"></span>
+      <span class="pill" id="saveStatus">Idle</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <div class="section-title">Today's Checklist</div>
+    <div id="steps"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast">Started</div>
+
+<script>
+// Hide overlay (JS is running)
+document.getElementById('jsOverlay').style.display='none';
+document.getElementById('jsOK').textContent='OK';
+document.getElementById('readyMark').textContent='JS: OK';
+
+const STEPS=[
+  {id:0,name:"Setup & Release",minutes:2},
+  {id:1,name:"Breath & Onset Control",minutes:5},
+  {id:2,name:"Flow & Resonance (SOVT)",minutes:5},
+  {id:3,name:"Legato & Pace Training",minutes:6},
+  {id:4,name:"Precision (Articulation)",minutes:5},
+  {id:5,name:"Text Work",minutes:6},
+  {id:6,name:"Cooldown",minutes:2},
+];
+const STORE="voiceRoutineLogs_v3";
+function todayISO(){
+  try{
+    const f=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Melbourne',year:'numeric',month:'2-digit',day:'2-digit'});
+    const p=f.formatToParts(new Date()); return p[4].value+'-'+p[0].value+'-'+p[2].value;
+  }catch(e){return new Date().toISOString().slice(0,10)}
+}
+function load(){try{return JSON.parse(localStorage.getItem(STORE))||{}}catch(e){return{}}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d)); flash('Saved'); document.getElementById('saveStatus').textContent='Saved'}
+function ensureToday(d){const t=todayISO(); if(!d[t]) d[t]={done:{},timers:{}}; STEPS.forEach(s=>{if(d[t].done[s.id]==null)d[t].done[s.id]=0;if(d[t].timers[s.id]==null)d[t].timers[s.id]=0}); return t;}
+let activeTimer=null,currentIdx=null;
+function human(sec){sec=Math.max(0,Math.floor(sec)); const m=Math.floor(sec/60),s=sec%60; return m+':'+String(s).padStart(2,'0')}
+function render(){
+  const root=document.getElementById('steps'); root.innerHTML='';
+  const d=load(); const t=ensureToday(d); document.getElementById('todayLabel').textContent='Today: '+t;
+  STEPS.forEach((s,i)=>{
+    const done=d[t].done[s.id]===1; const tm=d[t].timers[s.id]||0;
+    const div=document.createElement('div'); div.className='step'+(done?' done':''); if(currentIdx===i)div.classList.add('active-step');
+    const left=document.createElement('div'); left.innerHTML=`<input type="checkbox" ${done?'checked':''}>`;
+    left.querySelector('input').addEventListener('change',()=>{d[t].done[s.id]=d[t].done[s.id]===1?0:1; save(d); render()});
+    const mid=document.createElement('div'); mid.innerHTML=`<h3>${s.id}) ${s.name}</h3><div class="meta">Target: ${s.minutes} min</div>`;
+    const right=document.createElement('div');
+    const timer=document.createElement('span'); timer.className='timer'; timer.id='tm_'+s.id; timer.textContent=human(tm);
+    const start=document.createElement('button'); start.className='primary'; start.textContent='Start';
+    const stop=document.createElement('button'); stop.textContent='Stop';
+    const reset=document.createElement('button'); reset.textContent='Reset';
+    start.addEventListener('click',()=>startTimer(s.id));
+    stop.addEventListener('click',()=>stopTimer(s.id));
+    reset.addEventListener('click',()=>{d[t].timers[s.id]=0; save(d); render()});
+    right.append(timer,document.createTextNode(' '),start,document.createTextNode(' '),stop,document.createTextNode(' '),reset);
+    div.append(left,mid,right); root.append(div);
+  });
+}
+function startTimer(id){
+  if(activeTimer) stopTimer(activeTimer.id);
+  const start=Date.now(); activeTimer={id,at:start,tick:setInterval(()=>{
+    const d=load(); const t=ensureToday(d);
+    const base=d[t].timers[id]||0; const total=base+Math.floor((Date.now()-start)/1000);
+    const lbl=document.getElementById('tm_'+id); if(lbl) lbl.textContent=human(total);
+  },200)};
+  currentIdx=STEPS.findIndex(s=>s.id===id); toast('Started '+STEPS[currentIdx].name);
+  render();
+}
+function stopTimer(id){
+  if(!activeTimer) return; clearInterval(activeTimer.tick);
+  const d=load(); const t=ensureToday(d);
+  const elapsed=Math.floor((Date.now()-activeTimer.at)/1000);
+  d[t].timers[activeTimer.id]=(d[t].timers[activeTimer.id]||0)+Math.max(0,elapsed);
+  activeTimer=null; save(d); render();
+}
+function startFlow(){
+  currentIdx=0; render(); startTimer(STEPS[currentIdx].id);
+}
+function advance(){ if(currentIdx==null) return; stopTimer(STEPS[currentIdx].id);
+  const d=load(); const t=ensureToday(d); d[t].done[STEPS[currentIdx].id]=1; save(d);
+  if(currentIdx<STEPS.length-1){ currentIdx++; startTimer(STEPS[currentIdx].id); }
+  else { currentIdx=null; render(); toast('Routine complete'); }
+}
+function flash(msg){const el=document.getElementById('saveStatus'); el.textContent=msg; setTimeout(()=>el.textContent='Idle',1200)}
+function toast(msg){const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1300)}
+document.getElementById('startFlow').addEventListener('click', startFlow);
+document.getElementById('advance').addEventListener('click', advance);
+document.getElementById('markAll').addEventListener('click', ()=>{const d=load(); const t=ensureToday(d); STEPS.forEach(s=>d[t].done[s.id]=1); save(d); render()});
+document.addEventListener('keydown', e=>{if(e.key==='Enter') advance()});
+render();
+</script>
+<noscript>
+  <div style="position:fixed;inset:0;background:#0b0d11;color:#e7ecf3;display:flex;align-items:center;justify-content:center">
+    <div style="max-width:700px;border:1px solid #2a3140;border-radius:12px;padding:16px;background:#12161e">
+      JavaScript is disabled. Open this file in Safari/Chrome and enable JavaScript.
+    </div>
+  </div>
+</noscript>
+</body>
+</html>
