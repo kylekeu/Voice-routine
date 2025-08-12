@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actor Voice Routine — v3 Interactive</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--muted:#9aa4af;--text:#e7ecf3;--accent:#22d3ee;--ok:#34d399;--warn:#f59e0b;--bad:#ef4444;--grid:#232833}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f1115;color:var(--text)}
+  header{position:sticky;top:0;z-index:10;background:rgba(15,17,21,.7);backdrop-filter:blur(8px);border-bottom:1px solid #232833}
+  .wrap{max-width:1024px;margin:0 auto;padding:14px} h1{margin:6px 0 2px 0;font-size:20px}
+  .sub{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pill{border:1px solid #2a3140;padding:4px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
+  button{background:#0f172a;border:1px solid #2a3140;color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600}
+  button.primary{border-color:var(--accent);background:#0a1520} button.ok{border-color:var(--ok)} button.warn{border-color:var(--warn)} button.bad{border-color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1fr;gap:12px} @media(min-width:980px){.grid{grid-template-columns:2fr 1fr}}
+  .card{background:var(--card);border:1px solid #232833;border-radius:12px;padding:14px}
+  .section-title{font-weight:700;font-size:14px;letter-spacing:.2px;text-transform:uppercase;color:#b7c3cf;margin-bottom:6px}
+  .tabs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .tab{padding:6px 10px;border:1px solid #2a3140;border-radius:999px;color:#cbd5e1;cursor:pointer} .tab.active{border-color:#22d3ee;background:#0a1520;color:#e7ecf3}
+  .panel{display:none} .panel.active{display:block}
+  .flex{display:flex;gap:10px;flex-wrap:wrap}
+  .col{flex:1;min-width:280px}
+  .meter{height:12px;background:#0b1119;border:1px solid #2a3140;border-radius:999px;overflow:hidden}
+  .bar{height:100%;width:0;background:#22d3ee;transition:width .08s linear}
+  canvas{background:#0b1119;border:1px solid #2a3140;border-radius:12px}
+  input[type="number"], input[type="range"], input[type="text"]{width:100%;background:#0c1118;color:var(--text);border:1px solid #2a3140;border-radius:10px;padding:8px}
+  label{font-size:12px;color:#c7d2de}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .foot{color:#7a8796;font-size:12px;text-align:center;margin-top:10px}
+  .hint{color:#9aa4af;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Actor Voice Routine — v3 <span class="pill" id="jsStatus">JS: starting…</span></h1>
+    <div class="sub">Interactive breathing animation, S/Z trainer with audio, siren demo, mic visualizer & metronome. Offline.</div>
+    <div class="tabs">
+      <div class="tab active" data-tab="routine">Routine</div>
+      <div class="tab" data-tab="breath">Breath Coach</div>
+      <div class="tab" data-tab="sovt">Flow / S–Z / Siren</div>
+      <div class="tab" data-tab="metro">Metronome & Pace</div>
+      <div class="tab" data-tab="mic">Mic Visualizer</div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Routine card (same as v2 but lighter) -->
+  <section class="card panel active" id="panel_routine">
+    <div class="section-title">Today's Checklist</div>
+    <div id="steps"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="startFlow" class="primary">Start Routine</button>
+      <button id="advance">Advance (Enter)</button>
+      <button id="markAll" class="ok">Mark All Done</button>
+      <span class="pill" id="todayLabel"></span>
+      <span class="pill" id="saveStatus">Idle</span>
+    </div>
+  </section>
+
+  <!-- Breath Coach -->
+  <section class="card panel" id="panel_breath">
+    <div class="section-title">Breath Coach</div>
+    <div class="flex">
+      <div class="col">
+        <canvas id="breathCanvas" width="360" height="360"></canvas>
+      </div>
+      <div class="col">
+        <div class="grid2">
+          <div><label>Inhale (s)</label><input type="number" id="inh" min="1" value="4"></div>
+          <div><label>Hold (s)</label><input type="number" id="hold" min="0" value="0"></div>
+          <div><label>Exhale (s)</label><input type="number" id="exh" min="2" value="12"></div>
+          <div><label>Cycles</label><input type="number" id="cycles" min="1" value="4"></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="breathStart" class="primary">Start</button>
+          <button id="breathStop">Stop</button>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="breathBeep" checked> Beeps</label>
+        </div>
+        <div class="hint" style="margin-top:8px">The circle expands on inhale and shrinks on exhale. Use as a legato airflow guide.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOVT / S-Z / Siren -->
+  <section class="card panel" id="panel_sovt">
+    <div class="section-title">Flow / S–Z / Siren</div>
+    <div class="grid2">
+      <div>
+        <h3 style="margin:4px 0">Reference Sounds</h3>
+        <div class="row">
+          <button id="playS" class="primary">Play “S” (hiss)</button>
+          <button id="playZ">Play “Z” (voiced)</button>
+          <button id="stopSZ" class="bad">Stop</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <label>“Z” Pitch (Hz)</label>
+          <input type="range" id="zPitch" min="80" max="220" value="130">
+        </div>
+        <div class="hint">Match continuity and ease. “Z” should ride the breath, not force it.</div>
+      </div>
+      <div>
+        <h3 style="margin:4px 0">Siren Demo</h3>
+        <div class="row">
+          <button id="playSiren" class="primary">Play Siren (low→high→low)</button>
+          <button id="stopSiren" class="bad">Stop</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <label>Low–High (Hz)</label>
+          <input type="range" id="sirLow" min="80" max="220" value="120">
+          <input type="range" id="sirHigh" min="220" max="700" value="480">
+        </div>
+        <div class="hint">Use lip trill / NG hum to imitate the slide without tension.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Metronome -->
+  <section class="card panel" id="panel_metro">
+    <div class="section-title">Metronome & Pace</div>
+    <div class="grid2">
+      <div>
+        <h3 style="margin:4px 0">Metronome</h3>
+        <div class="row">
+          <label>BPM</label><input type="range" id="bpm" min="40" max="140" value="70" style="flex:1">
+          <span class="pill" id="bpmOut">70</span>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="metroStart" class="primary">Start</button>
+          <button id="metroStop">Stop</button>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="accentFirst" checked> Accent beat 1</label>
+        </div>
+        <div class="meter" style="margin-top:8px"><div class="bar" id="metroBar"></div></div>
+        <div class="hint">Read one word per beat to cap speed; then two per beat while keeping legato.</div>
+      </div>
+      <div>
+        <h3 style="margin:4px 0">Pace Timer</h3>
+        <div class="row">
+          <label>Minutes</label><input type="number" id="paceMin" value="1" min="0" style="width:90px">
+          <button id="paceStart" class="primary">Start</button>
+          <button id="paceStop">Stop</button>
+          <span class="pill" id="paceOut">0:00</span>
+        </div>
+        <div class="hint">Use for 60–90s text passes; match the metronome and stay smooth.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Mic Visualizer -->
+  <section class="card panel" id="panel_mic">
+    <div class="section-title">Mic Visualizer</div>
+    <div class="row">
+      <button id="micStart" class="primary">Start Mic</button>
+      <button id="micStop">Stop Mic</button>
+      <span class="pill">Smoothness: <span id="smoothOut">--</span></span>
+    </div>
+    <canvas id="micCanvas" width="680" height="160" style="margin-top:8px; width:100%"></canvas>
+    <div class="hint">Aim for a steady bar with minimal ripple during hisses/hums = continuous airflow.</div>
+  </section>
+
+  <div class="foot">Tip: Add this page to your Home Screen for faster access. All data stays on your device.</div>
+</main>
+
+<script>
+// --- Tabs ---
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel_'+t.dataset.tab).classList.add('active');
+  });
+});
+
+// --- Storage helpers ---
+const STORE="voiceRoutine_v3";
+function todayISO(){
+  try{const f=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Melbourne',year:'numeric',month:'2-digit',day:'2-digit'});
+      const p=f.formatToParts(new Date()); return p.find(x=>x.type==='year').value+'-'+p.find(x=>x.type==='month').value+'-'+p.find(x=>x.type==='day').value;}
+  catch(e){return new Date().toISOString().slice(0,10)}
+}
+function load(){try{return JSON.parse(localStorage.getItem(STORE))||{}}catch(e){return{}}}
+function save(d){localStorage.setItem(STORE,JSON.stringify(d)); flash('Saved')}
+function ensureToday(d){const t=todayISO(); if(!d[t]) d[t]={done:{},timers:{}}; [0,1,2,3,4,5,6].forEach(id=>{if(d[t].done[id]==null)d[t].done[id]=0;if(d[t].timers[id]==null)d[t].timers[id]=0}); return t}
+
+// --- Routine (checklist) ---
+function human(s){s=Math.max(0,Math.floor(s)); const m=Math.floor(s/60),r=s%60; return m+':'+String(r).padStart(2,'0')}
+function renderSteps(){
+  const STEPS=[
+    {id:0,name:"Setup & Release",minutes:2},
+    {id:1,name:"Breath & Onset Control",minutes:5},
+    {id:2,name:"Flow & Resonance (SOVT)",minutes:5},
+    {id:3,name:"Legato & Pace Training",minutes:6},
+    {id:4,name:"Precision (Articulation)",minutes:5},
+    {id:5,name:"Text Work",minutes:6},
+    {id:6,name:"Cooldown",minutes:2},
+  ];
+  const root=document.getElementById('steps'); root.innerHTML='';
+  const d=load(); const t=ensureToday(d); document.getElementById('todayLabel').textContent='Today: '+t;
+  STEPS.forEach((s,i)=>{
+    const done=d[t].done[s.id]===1; const tm=d[t].timers[s.id]||0;
+    const div=document.createElement('div'); div.className='step'+(done?' done':'');
+    const left=document.createElement('div'); left.innerHTML=`<input type="checkbox" ${done?'checked':''}>`;
+    left.querySelector('input').addEventListener('change',()=>{d[t].done[s.id]=d[t].done[s.id]===1?0:1; save(d); renderSteps()});
+    const mid=document.createElement('div'); mid.innerHTML=`<h3>${s.id}) ${s.name}</h3><div class="meta">Target: ${s.minutes} min</div>`;
+    const right=document.createElement('div');
+    const timer=document.createElement('span'); timer.className='timer'; timer.id='tm_'+s.id; timer.textContent=human(tm);
+    const start=document.createElement('button'); start.className='primary'; start.textContent='Start';
+    const stop=document.createElement('button'); stop.textContent='Stop';
+    const reset=document.createElement('button'); reset.textContent='Reset';
+    start.addEventListener('click',()=>startTimer(s.id));
+    stop.addEventListener('click',()=>stopTimer(s.id));
+    reset.addEventListener('click',()=>{d[t].timers[s.id]=0; save(d); renderSteps()});
+    right.append(timer,document.createTextNode(' '),start,document.createTextNode(' '),stop,document.createTextNode(' '),reset);
+    div.append(left,mid,right); root.append(div);
+  });
+}
+let activeTimer=null,currentIdx=null;
+function startTimer(id){
+  if(activeTimer) stopTimer(activeTimer.id);
+  const start=Date.now();
+  activeTimer={id,at:start,tick:setInterval(()=>{
+    const d=load(); const t=ensureToday(d); const base=d[t].timers[id]||0; const total=base+Math.floor((Date.now()-start)/1000);
+    const lbl=document.getElementById('tm_'+id); if(lbl) lbl.textContent=human(total);
+  },200)};
+  currentIdx=id;
+}
+function stopTimer(){
+  if(!activeTimer) return;
+  const d=load(); const t=ensureToday(d);
+  const elapsed=Math.floor((Date.now()-activeTimer.at)/1000);
+  d[t].timers[activeTimer.id]=(d[t].timers[activeTimer.id]||0)+Math.max(0,elapsed);
+  activeTimer=null; save(d); renderSteps();
+}
+document.getElementById('startFlow').addEventListener('click',()=>{currentIdx=0; renderSteps(); startTimer(0)});
+document.getElementById('advance').addEventListener('click',()=>{
+  if(currentIdx==null) return;
+  stopTimer(currentIdx);
+  const d=load(); const t=ensureToday(d); d[t].done[currentIdx]=1; save(d);
+  if(currentIdx<6){ currentIdx++; startTimer(currentIdx); } else { currentIdx=null; }
+});
+document.getElementById('markAll').addEventListener('click',()=>{const d=load(); const t=ensureToday(d); [0,1,2,3,4,5,6].forEach(id=>d[t].done[id]=1); save(d); renderSteps()});
+renderSteps();
+
+// --- Web Audio ---
+const jsStatus=document.getElementById('jsStatus'); jsStatus.textContent='JS: OK';
+let AC=null, masterGain=null;
+function ensureAC(){
+  if(!AC){
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    masterGain=AC.createGain(); masterGain.gain.value=0.6; masterGain.connect(AC.destination);
+  }
+}
+function beep(dur=0.1, freq=880){
+  ensureAC();
+  const o=AC.createOscillator(); const g=AC.createGain(); o.type='square'; o.frequency.value=freq;
+  o.connect(g); g.connect(masterGain); g.gain.value=0; o.start();
+  const t=AC.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7, t+0.005); g.gain.linearRampToValueAtTime(0, t+dur);
+  o.stop(t+dur+0.01);
+}
+
+// --- Breath Coach ---
+const bc={running:false,phase:'idle',remain:0,seq:[],idx:0,lastTs:null};
+const bcv={canvas:document.getElementById('breathCanvas'), inh:document.getElementById('inh'), hold:document.getElementById('hold'), exh:document.getElementById('exh'), cycles:document.getElementById('cycles'), beep:document.getElementById('breathBeep')};
+const bctx=bcv.canvas.getContext('2d');
+function drawBreath(progress, label){
+  const ctx=bctx, w=bcv.canvas.width, h=bcv.canvas.height; ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#0b1119'; ctx.fillRect(0,0,w,h);
+  const minR=40, maxR=150; const r=minR+(maxR-minR)*progress;
+  ctx.beginPath(); ctx.arc(w/2,h/2,r,0,Math.PI*2); ctx.fillStyle='#0a1520'; ctx.fill();
+  ctx.strokeStyle='#22d3ee'; ctx.lineWidth=4; ctx.stroke();
+  ctx.fillStyle='#cbd5e1'; ctx.font='bold 18px system-ui'; ctx.textAlign='center'; ctx.fillText(label, w/2, h/2);
+}
+function startBreath(){
+  ensureAC();
+  const inh=Number(bcv.inh.value||4), hold=Number(bcv.hold.value||0), exh=Number(bcv.exh.value||8), cyc=Number(bcv.cycles.value||4);
+  bc.seq=[]; for(let i=0;i<cyc;i++){ bc.seq.push({p:'inh',d:inh},{p:'hold',d:hold},{p:'exh',d:exh}); }
+  bc.idx=0; bc.remain=bc.seq[0].d; bc.phase=bc.seq[0].p; bc.running=true; bc.lastTs=null;
+  if(bcv.beep.checked) beep(0.12,660);
+  requestAnimationFrame(stepBreath);
+}
+function stopBreath(){ bc.running=false; drawBreath(0,'Stopped'); }
+function stepBreath(ts){
+  if(!bc.running) return;
+  if(!bc.lastTs) bc.lastTs=ts;
+  const dt=(ts-bc.lastTs)/1000; bc.lastTs=ts;
+  bc.remain-=dt;
+  if(bc.remain<=0){
+    bc.idx++;
+    if(bc.idx>=bc.seq.length){ stopBreath(); return; }
+    bc.phase=bc.seq[bc.idx].p; bc.remain=bc.seq[bc.idx].d;
+    if(bcv.beep.checked) beep(0.12, bc.phase==='inh'?700:bc.phase==='exh'?520:400);
+  }
+  const cur=bc.seq[bc.idx]; const total=cur.d||1; const passed=(total-bc.remain);
+  let progress=0, label='';
+  if(cur.p==='inh'){ progress=Math.min(1, passed/total); label=`Inhale ${Math.ceil(bc.remain)}s`; }
+  else if(cur.p==='exh'){ progress=Math.max(0, 1 - passed/total); label=`Exhale ${Math.ceil(bc.remain)}s`; }
+  else { progress=1; label=`Hold ${Math.ceil(bc.remain)}s`; }
+  drawBreath(progress,label);
+  requestAnimationFrame(stepBreath);
+}
+document.getElementById('breathStart').addEventListener('click', startBreath);
+document.getElementById('breathStop').addEventListener('click', stopBreath);
+
+// --- S/Z & Siren ---
+let noiseNode=null, noiseGain=null, zOsc=null, zGain=null, sirOsc=null, sirGain=null;
+function playS(){
+  ensureAC();
+  stopSZ();
+  // White noise buffer
+  const buffer=AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate);
+  const data=buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+  const src=AC.createBufferSource(); src.buffer=buffer; src.loop=true;
+  const hp=AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=3000;
+  const g=AC.createGain(); g.gain.value=0.25;
+  src.connect(hp); hp.connect(g); g.connect(masterGain);
+  src.start(); noiseNode=src; noiseGain=g;
+}
+function playZ(){
+  ensureAC();
+  stopSZ();
+  const freq=Number(document.getElementById('zPitch').value||130);
+  const o=AC.createOscillator(); o.type='sawtooth'; o.frequency.value=freq;
+  const lpf=AC.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=1500;
+  const g=AC.createGain(); g.gain.value=0.2;
+  o.connect(lpf); lpf.connect(g); g.connect(masterGain);
+  o.start(); zOsc=o; zGain=g;
+}
+function stopSZ(){
+  if(noiseNode){ try{noiseNode.stop()}catch{}; noiseNode.disconnect(); noiseNode=null; }
+  if(zOsc){ try{zOsc.stop()}catch{}; zOsc.disconnect(); zOsc=null; }
+}
+document.getElementById('playS').addEventListener('click', playS);
+document.getElementById('playZ').addEventListener('click', playZ);
+document.getElementById('stopSZ').addEventListener('click', stopSZ);
+document.getElementById('zPitch').addEventListener('input', ()=>{ if(zOsc) zOsc.frequency.setValueAtTime(Number(zPitch.value), AC.currentTime) });
+
+function playSiren(){
+  ensureAC();
+  stopSiren();
+  const low=Number(document.getElementById('sirLow').value||120);
+  const high=Number(document.getElementById('sirHigh').value||480);
+  const o=AC.createOscillator(); o.type='triangle';
+  const g=AC.createGain(); g.gain.value=0.15; o.connect(g); g.connect(masterGain);
+  const t=AC.currentTime;
+  o.frequency.setValueAtTime(low, t);
+  o.frequency.linearRampToValueAtTime(high, t+2.5);
+  o.frequency.linearRampToValueAtTime(low, t+5.0);
+  o.start(); sirOsc=o; sirGain=g;
+  // auto stop after 5.2s
+  o.stop(t+5.2);
+}
+function stopSiren(){
+  if(sirOsc){ try{sirOsc.stop()}catch{}; sirOsc.disconnect(); sirOsc=null; }
+}
+document.getElementById('playSiren').addEventListener('click', playSiren);
+document.getElementById('stopSiren').addEventListener('click', stopSiren);
+
+// --- Metronome ---
+let metroInt=null; const bpmSlider=document.getElementById('bpm'); const bpmOut=document.getElementById('bpmOut');
+bpmSlider.addEventListener('input', ()=>bpmOut.textContent=bpmSlider.value);
+function startMetro(){
+  ensureAC();
+  stopMetro();
+  const accentFirst=document.getElementById('accentFirst').checked;
+  const bar=document.getElementById('metroBar');
+  let beat=0;
+  function tick(){
+    const bpm=Number(bpmSlider.value||70); const interval=60000/bpm;
+    const freq = (beat%4===0 && accentFirst) ? 1200 : 880;
+    beep(0.06,freq);
+    bar.style.width = ((beat%4)+1)/4*100+'%';
+    beat++;
+    metroInt=setTimeout(tick, interval);
+  }
+  tick();
+}
+function stopMetro(){ if(metroInt){ clearTimeout(metroInt); metroInt=null; document.getElementById('metroBar').style.width='0%' } }
+document.getElementById('metroStart').addEventListener('click', startMetro);
+document.getElementById('metroStop').addEventListener('click', stopMetro);
+
+// Pace Timer
+let paceT=null, paceRemain=0;
+function startPace(){
+  const m=Number(document.getElementById('paceMin').value||1);
+  paceRemain = Math.max(1, Math.floor(m*60));
+  updatePaceOut();
+  if(paceT) clearInterval(paceT);
+  paceT=setInterval(()=>{
+    paceRemain--; updatePaceOut();
+    if(paceRemain<=0){ clearInterval(paceT); paceT=null; beep(0.2,660); beep(0.2,520); }
+  },1000);
+}
+function stopPace(){ if(paceT){ clearInterval(paceT); paceT=null; } }
+function updatePaceOut(){ const m=Math.floor(paceRemain/60), s=paceRemain%60; document.getElementById('paceOut').textContent=m+':'+String(s).padStart(2,'0'); }
+document.getElementById('paceStart').addEventListener('click', startPace);
+document.getElementById('paceStop').addEventListener('click', stopPace);
+
+// --- Mic Visualizer ---
+let micStream=null, micSrc=null, micAnalyser=null, micAnim=null;
+const micCanvas=document.getElementById('micCanvas'); const mctx=micCanvas.getContext('2d');
+function startMic(){
+  if(micStream) return;
+  navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+    ensureAC();
+    micStream=stream; micSrc=AC.createMediaStreamSource(stream);
+    micAnalyser=AC.createAnalyser(); micAnalyser.fftSize=2048;
+    micSrc.connect(micAnalyser);
+    micLoop();
+  }).catch(err=>{ alert('Mic permission denied: '+err.message); });
+}
+function stopMic(){
+  if(micAnim) cancelAnimationFrame(micAnim); micAnim=null;
+  if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
+}
+function micLoop(){
+  const buf=new Float32Array(micAnalyser.fftSize);
+  function draw(){
+    micAnalyser.getFloatTimeDomainData(buf);
+    // Compute RMS
+    let sum=0; for(let i=0;i<buf.length;i++){ sum+=buf[i]*buf[i]; }
+    const rms=Math.sqrt(sum/buf.length);
+    // Smoothness: measure frame-to-frame change (lower = smoother)
+    if(!draw.prev) draw.prev=rms;
+    const delta=Math.abs(rms-draw.prev);
+    draw.prev=rms;
+    const smooth=Math.max(0, 1 - Math.min(1, delta*60)); // 0..1
+    document.getElementById('smoothOut').textContent = Math.round(smooth*100)+'%';
+    // Draw bar + waveform
+    mctx.fillStyle='#0b1119'; mctx.fillRect(0,0,micCanvas.width,micCanvas.height);
+    // waveform
+    mctx.strokeStyle='#22d3ee'; mctx.lineWidth=1.2; mctx.beginPath();
+    const mid=micCanvas.height/2; for(let i=0;i<buf.length;i++){ const x=i/buf.length*micCanvas.width; const y=mid+buf[i]*mid*0.9; if(i===0)mctx.moveTo(x,y); else mctx.lineTo(x,y); } mctx.stroke();
+    // RMS bar
+    mctx.fillStyle='#34d399'; const barW = Math.min(micCanvas.width, rms*micCanvas.width*4); mctx.fillRect(0, micCanvas.height-12, barW, 12);
+    micAnim=requestAnimationFrame(draw);
+  }
+  draw();
+}
+document.getElementById('micStart').addEventListener('click', startMic);
+document.getElementById('micStop').addEventListener('click', stopMic);
+
+// --- UX helpers ---
+function flash(msg){ const el=document.getElementById('saveStatus'); el.textContent=msg; setTimeout(()=>el.textContent='Idle',1200) }
+
+</script>
+</body>
+</html>
